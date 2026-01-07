@@ -51,6 +51,13 @@ type NextActionResponse struct {
 	Status      models.ActionStatus  `json:"status"`
 }
 
+type ActionUpdateRequest struct {
+	Description *string               `json:"description"`
+	Context     *models.ActionContext `json:"context"`
+	Energy      *models.Energy        `json:"energy"`
+	Status      *models.ActionStatus  `json:"status"`
+}
+
 type DashboardResponse struct {
 	NextActions []NextActionResponse `json:"nextActions"`
 }

@@ -141,6 +141,43 @@ func (s *ProductivityService) CreateAction(ctx context.Context, req dto.ActionCr
 	return s.actionRepo.Create(ctx, action)
 }
 
+func (s *ProductivityService) UpdateAction(ctx context.Context, actionID string, req dto.ActionUpdateRequest) error {
+	id, err := bson.ObjectIDFromHex(actionID)
+	if err != nil {
+		return err
+	}
+
+	action, err := s.actionRepo.GetByID(ctx, id)
+	if err != nil {
+		return err
+	}
+
+	if req.Description != nil {
+		action.Description = *req.Description
+	}
+	if req.Context != nil {
+		action.Context = *req.Context
+	}
+	if req.Energy != nil {
+		action.Energy = *req.Energy
+	}
+	if req.Status != nil {
+		// Business Rule: Each Project has max ONE NextAction with status = CURRENT
+		if *req.Status == models.ActionStatusCurrent && action.Status != models.ActionStatusCurrent {
+			existing, err := s.actionRepo.FindOne(ctx, bson.M{
+				"projectId": action.ProjectID,
+				"status":    models.ActionStatusCurrent,
+			})
+			if err == nil && existing != nil {
+				return errors.New("each project has max one NextAction with status = CURRENT")
+			}
+		}
+		action.Status = *req.Status
+	}
+
+	return s.actionRepo.Update(ctx, action)
+}
+
 func (s *ProductivityService) CompleteAction(ctx context.Context, actionID string) error {
 	id, err := bson.ObjectIDFromHex(actionID)
 	if err != nil {

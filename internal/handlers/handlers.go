@@ -76,6 +76,21 @@ func (h *ProductivityHandler) CreateAction(c *gin.Context) {
 	c.Status(http.StatusCreated)
 }
 
+func (h *ProductivityHandler) UpdateAction(c *gin.Context) {
+	id := c.Param("id")
+	var req dto.ActionUpdateRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	if err := h.service.UpdateAction(c.Request.Context(), id, req); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.Status(http.StatusOK)
+}
+
 func (h *ProductivityHandler) CompleteAction(c *gin.Context) {
 	id := c.Param("id")
 	if err := h.service.CompleteAction(c.Request.Context(), id); err != nil {

@@ -64,6 +64,7 @@ func main() {
 	r.GET("/goals", handler.GetGoals)
 	r.POST("/capture", handler.Capture)
 	r.POST("/actions", handler.CreateAction)
+	r.PATCH("/actions/:id", handler.UpdateAction)
 	r.POST("/actions/:id/complete", handler.CompleteAction)
 	r.POST("/projects", handler.CreateProject)
 	r.GET("/projects", handler.GetProjects)
