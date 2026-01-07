@@ -7,6 +7,7 @@ import (
 	"productivity-app/internal/models"
 	"productivity-app/internal/repositories"
 	"strings"
+	"time"
 
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
@@ -79,6 +80,31 @@ func (s *ProductivityService) CreateGoal(ctx context.Context, req dto.GoalCreate
 	return s.goalRepo.Create(ctx, goal)
 }
 
+func (s *ProductivityService) UpdateGoal(ctx context.Context, goalID string, req dto.GoalUpdateRequest) error {
+	id, err := bson.ObjectIDFromHex(goalID)
+	if err != nil {
+		return err
+	}
+
+	goal, err := s.goalRepo.GetByID(ctx, id)
+	if err != nil {
+		return err
+	}
+
+	if req.Title != nil {
+		goal.Title = *req.Title
+	}
+	if req.Priority != nil {
+		goal.Priority = *req.Priority
+	}
+	if req.Active != nil {
+		goal.Active = *req.Active
+	}
+
+	goal.UpdatedAt = time.Now()
+	return s.goalRepo.Update(ctx, goal)
+}
+
 func (s *ProductivityService) GetGoals(ctx context.Context) ([]dto.GoalResponse, error) {
 	goals, err := s.goalRepo.Find(ctx, bson.M{})
 	if err != nil {
@@ -99,14 +125,28 @@ func (s *ProductivityService) GetGoals(ctx context.Context) ([]dto.GoalResponse,
 	return resp, nil
 }
 
+func (s *ProductivityService) DeleteGoal(ctx context.Context, goalID string) error {
+	id, err := bson.ObjectIDFromHex(goalID)
+	if err != nil {
+		return err
+	}
+
+	projects, err := s.projectRepo.Find(ctx, bson.M{"goalId": id})
+	if err == nil {
+		for _, p := range projects {
+			_ = s.actionRepo.DeleteMany(ctx, bson.M{"projectId": p.ID})
+		}
+	}
+	_ = s.projectRepo.DeleteMany(ctx, bson.M{"goalId": id})
+
+	return s.goalRepo.Delete(ctx, id)
+}
+
 func (s *ProductivityService) Capture(ctx context.Context, text string) error {
-	// Simple parsing: short, specific -> NextAction, vague -> Project
-	// This is a placeholder for more sophisticated logic
 	isVague := len(strings.Split(text, " ")) < 3 || strings.Contains(strings.ToLower(text), "maybe")
 	now := time.Now()
 
 	if isVague {
-		// Create a Project (mocking a default GoalID for now, or could be a "Inbox" Goal)
 		project := &models.Project{
 			Title:     text,
 			Status:    models.ProjectStatusBacklog,
@@ -115,7 +155,6 @@ func (s *ProductivityService) Capture(ctx context.Context, text string) error {
 		}
 		return s.projectRepo.Create(ctx, project)
 	} else {
-		// Create a NextAction (mocking a default ProjectID for now, or could be "Inbox" Project)
 		action := &models.NextAction{
 			Description: text,
 			Status:      models.ActionStatusQueued,
@@ -124,6 +163,9 @@ func (s *ProductivityService) Capture(ctx context.Context, text string) error {
 			CreatedAt:   now,
 			UpdatedAt:   now,
 		}
+		
+		// If we had a default active project (e.g., "Inbox"), we could auto-promote here.
+		// For now, let's keep it simple as Capture doesn't specify a projectID yet.
 		return s.actionRepo.Create(ctx, action)
 	}
 }
@@ -164,7 +206,6 @@ func (s *ProductivityService) GetActions(ctx context.Context, status string, pro
 func (s *ProductivityService) CreateAction(ctx context.Context, req dto.ActionCreateRequest) error {
 	projectID, _ := bson.ObjectIDFromHex(req.ProjectID)
 
-	// Business Rule: Each Project has max ONE NextAction with status = CURRENT
 	if req.Status == models.ActionStatusCurrent {
 		existing, err := s.actionRepo.FindOne(ctx, bson.M{
 			"projectId": projectID,
@@ -184,6 +225,20 @@ func (s *ProductivityService) CreateAction(ctx context.Context, req dto.ActionCr
 		Status:      req.Status,
 		CreatedAt:   now,
 		UpdatedAt:   now,
+	}
+
+	// Auto-promote if project is ACTIVE and has no CURRENT action
+	if action.Status == models.ActionStatusQueued {
+		project, err := s.projectRepo.GetByID(ctx, projectID)
+		if err == nil && project.Status == models.ProjectStatusActive {
+			current, _ := s.actionRepo.FindOne(ctx, bson.M{
+				"projectId": projectID,
+				"status":    models.ActionStatusCurrent,
+			})
+			if current == nil {
+				action.Status = models.ActionStatusCurrent
+			}
+		}
 	}
 
 	return s.actionRepo.Create(ctx, action)
@@ -210,7 +265,6 @@ func (s *ProductivityService) UpdateAction(ctx context.Context, actionID string,
 		action.Energy = *req.Energy
 	}
 	if req.Status != nil {
-		// Business Rule: Each Project has max ONE NextAction with status = CURRENT
 		if *req.Status == models.ActionStatusCurrent && action.Status != models.ActionStatusCurrent {
 			existing, err := s.actionRepo.FindOne(ctx, bson.M{
 				"projectId": action.ProjectID,
@@ -228,12 +282,19 @@ func (s *ProductivityService) UpdateAction(ctx context.Context, actionID string,
 		return err
 	}
 
-	// Trigger promotion if status was changed to DONE
 	if req.Status != nil && *req.Status == models.ActionStatusDone {
 		_ = s.promoteNextQueued(ctx, action.ProjectID)
 	}
 
 	return nil
+}
+
+func (s *ProductivityService) DeleteAction(ctx context.Context, actionID string) error {
+	id, err := bson.ObjectIDFromHex(actionID)
+	if err != nil {
+		return err
+	}
+	return s.actionRepo.Delete(ctx, id)
 }
 
 func (s *ProductivityService) CompleteAction(ctx context.Context, actionID string) error {
@@ -258,7 +319,6 @@ func (s *ProductivityService) CompleteAction(ctx context.Context, actionID strin
 }
 
 func (s *ProductivityService) promoteNextQueued(ctx context.Context, projectID bson.ObjectID) error {
-	// Only promote if there is NO current action
 	current, err := s.actionRepo.FindOne(ctx, bson.M{
 		"projectId": projectID,
 		"status":    models.ActionStatusCurrent,
@@ -267,7 +327,6 @@ func (s *ProductivityService) promoteNextQueued(ctx context.Context, projectID b
 		return nil
 	}
 
-	// Find the OLDEST queued action (sort by _id)
 	nextAction, err := s.actionRepo.FindOne(ctx, bson.M{
 		"projectId": projectID,
 		"status":    models.ActionStatusQueued,
@@ -308,6 +367,50 @@ func (s *ProductivityService) CreateProject(ctx context.Context, req dto.Project
 	}
 
 	return s.projectRepo.Create(ctx, project)
+}
+
+func (s *ProductivityService) UpdateProject(ctx context.Context, projectID string, req dto.ProjectUpdateRequest) error {
+	id, err := bson.ObjectIDFromHex(projectID)
+	if err != nil {
+		return err
+	}
+
+	project, err := s.projectRepo.GetByID(ctx, id)
+	if err != nil {
+		return err
+	}
+
+	oldStatus := project.Status
+	if req.Title != nil {
+		project.Title = *req.Title
+	}
+	if req.Outcome != nil {
+		project.Outcome = *req.Outcome
+	}
+	if req.Status != nil {
+		if *req.Status == models.ProjectStatusActive && project.Status != models.ProjectStatusActive {
+			count, err := s.projectRepo.CountActive(ctx)
+			if err != nil {
+				return err
+			}
+			if count >= 3 {
+				return errors.New("max 3 active projects allowed")
+			}
+		}
+		project.Status = *req.Status
+	}
+
+	project.UpdatedAt = time.Now()
+	if err := s.projectRepo.Update(ctx, project); err != nil {
+		return err
+	}
+
+	// If project became ACTIVE, promote a queued action
+	if project.Status == models.ProjectStatusActive && oldStatus != models.ProjectStatusActive {
+		_ = s.promoteNextQueued(ctx, project.ID)
+	}
+
+	return nil
 }
 
 func (s *ProductivityService) GetProjects(ctx context.Context, goalID string) ([]dto.ProjectResponse, error) {
@@ -353,19 +456,38 @@ func (s *ProductivityService) PromoteProject(ctx context.Context, projectID stri
 		return errors.New("max 3 active projects allowed")
 	}
 
-	// Update with timestamp
 	project, err := s.projectRepo.GetByID(ctx, id)
 	if err != nil {
 		return err
 	}
+
+	oldStatus := project.Status
 	project.Status = models.ProjectStatusActive
 	project.UpdatedAt = time.Now()
 	
-	return s.projectRepo.Update(ctx, project)
+	if err := s.projectRepo.Update(ctx, project); err != nil {
+		return err
+	}
+
+	if project.Status == models.ProjectStatusActive && oldStatus != models.ProjectStatusActive {
+		_ = s.promoteNextQueued(ctx, project.ID)
+	}
+
+	return nil
+}
+
+func (s *ProductivityService) DeleteProject(ctx context.Context, projectID string) error {
+	id, err := bson.ObjectIDFromHex(projectID)
+	if err != nil {
+		return err
+	}
+
+	_ = s.actionRepo.DeleteMany(ctx, bson.M{"projectId": id})
+
+	return s.projectRepo.Delete(ctx, id)
 }
 
 func (s *ProductivityService) GetWeeklyReview(ctx context.Context) (*dto.WeeklyReviewResponse, error) {
-	// projects without CURRENT action
 	allProjects, err := s.projectRepo.Find(ctx, bson.M{"status": bson.M{"$ne": models.ProjectStatusDone}})
 	if err != nil {
 		return nil, err
@@ -390,7 +512,6 @@ func (s *ProductivityService) GetWeeklyReview(ctx context.Context) (*dto.WeeklyR
 		}
 	}
 
-	// completed actions
 	doneActions, err := s.actionRepo.Find(ctx, bson.M{"status": models.ActionStatusDone})
 	if err != nil {
 		return nil, err
@@ -407,7 +528,6 @@ func (s *ProductivityService) GetWeeklyReview(ctx context.Context) (*dto.WeeklyR
 		})
 	}
 
-	// backlog projects
 	backlogProjectsData, err := s.projectRepo.Find(ctx, bson.M{"status": models.ProjectStatusBacklog})
 	if err != nil {
 		return nil, err

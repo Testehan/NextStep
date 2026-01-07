@@ -27,7 +27,6 @@ type ActionContext string
 const (
 	ContextDeepWork ActionContext = "DEEP_WORK"
 	ContextQuick    ActionContext = "QUICK"
-	ContextPhone    ActionContext = "PHONE"
 	ContextErrands  ActionContext = "ERRANDS"
 )
 

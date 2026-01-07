@@ -40,6 +40,22 @@ func (r *GoalRepository) Find(ctx context.Context, filter bson.M) ([]models.Goal
 	return goals, nil
 }
 
+func (r *GoalRepository) GetByID(ctx context.Context, id bson.ObjectID) (*models.Goal, error) {
+	var goal models.Goal
+	err := r.collection.FindOne(ctx, bson.M{"_id": id}).Decode(&goal)
+	return &goal, err
+}
+
+func (r *GoalRepository) Update(ctx context.Context, goal *models.Goal) error {
+	_, err := r.collection.UpdateOne(ctx, bson.M{"_id": goal.ID}, bson.M{"$set": goal})
+	return err
+}
+
+func (r *GoalRepository) Delete(ctx context.Context, id bson.ObjectID) error {
+	_, err := r.collection.DeleteOne(ctx, bson.M{"_id": id})
+	return err
+}
+
 type ProjectRepository struct {
 	collection *mongo.Collection
 }
@@ -80,6 +96,16 @@ func (r *ProjectRepository) UpdateStatus(ctx context.Context, id bson.ObjectID, 
 
 func (r *ProjectRepository) Update(ctx context.Context, project *models.Project) error {
 	_, err := r.collection.UpdateOne(ctx, bson.M{"_id": project.ID}, bson.M{"$set": project})
+	return err
+}
+
+func (r *ProjectRepository) Delete(ctx context.Context, id bson.ObjectID) error {
+	_, err := r.collection.DeleteOne(ctx, bson.M{"_id": id})
+	return err
+}
+
+func (r *ProjectRepository) DeleteMany(ctx context.Context, filter bson.M) error {
+	_, err := r.collection.DeleteMany(ctx, filter)
 	return err
 }
 
@@ -137,6 +163,16 @@ func (r *ActionRepository) GetByID(ctx context.Context, id bson.ObjectID) (*mode
 
 func (r *ActionRepository) Update(ctx context.Context, action *models.NextAction) error {
 	_, err := r.collection.UpdateOne(ctx, bson.M{"_id": action.ID}, bson.M{"$set": action})
+	return err
+}
+
+func (r *ActionRepository) Delete(ctx context.Context, id bson.ObjectID) error {
+	_, err := r.collection.DeleteOne(ctx, bson.M{"_id": id})
+	return err
+}
+
+func (r *ActionRepository) DeleteMany(ctx context.Context, filter bson.M) error {
+	_, err := r.collection.DeleteMany(ctx, filter)
 	return err
 }
 

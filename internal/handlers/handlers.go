@@ -39,6 +39,21 @@ func (h *ProductivityHandler) CreateGoal(c *gin.Context) {
 	c.Status(http.StatusCreated)
 }
 
+func (h *ProductivityHandler) UpdateGoal(c *gin.Context) {
+	id := c.Param("id")
+	var req dto.GoalUpdateRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	if err := h.service.UpdateGoal(c.Request.Context(), id, req); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.Status(http.StatusOK)
+}
+
 func (h *ProductivityHandler) GetGoals(c *gin.Context) {
 	resp, err := h.service.GetGoals(c.Request.Context())
 	if err != nil {
@@ -46,6 +61,15 @@ func (h *ProductivityHandler) GetGoals(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, resp)
+}
+
+func (h *ProductivityHandler) DeleteGoal(c *gin.Context) {
+	id := c.Param("id")
+	if err := h.service.DeleteGoal(c.Request.Context(), id); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.Status(http.StatusNoContent)
 }
 
 func (h *ProductivityHandler) Capture(c *gin.Context) {
@@ -103,6 +127,15 @@ func (h *ProductivityHandler) UpdateAction(c *gin.Context) {
 	c.Status(http.StatusOK)
 }
 
+func (h *ProductivityHandler) DeleteAction(c *gin.Context) {
+	id := c.Param("id")
+	if err := h.service.DeleteAction(c.Request.Context(), id); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.Status(http.StatusNoContent)
+}
+
 func (h *ProductivityHandler) CompleteAction(c *gin.Context) {
 	id := c.Param("id")
 	if err := h.service.CompleteAction(c.Request.Context(), id); err != nil {
@@ -126,6 +159,21 @@ func (h *ProductivityHandler) CreateProject(c *gin.Context) {
 	c.Status(http.StatusCreated)
 }
 
+func (h *ProductivityHandler) UpdateProject(c *gin.Context) {
+	id := c.Param("id")
+	var req dto.ProjectUpdateRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	if err := h.service.UpdateProject(c.Request.Context(), id, req); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.Status(http.StatusOK)
+}
+
 func (h *ProductivityHandler) GetProjects(c *gin.Context) {
 	goalID := c.Query("goalId")
 	resp, err := h.service.GetProjects(c.Request.Context(), goalID)
@@ -134,6 +182,15 @@ func (h *ProductivityHandler) GetProjects(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, resp)
+}
+
+func (h *ProductivityHandler) DeleteProject(c *gin.Context) {
+	id := c.Param("id")
+	if err := h.service.DeleteProject(c.Request.Context(), id); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.Status(http.StatusNoContent)
 }
 
 func (h *ProductivityHandler) PromoteProject(c *gin.Context) {

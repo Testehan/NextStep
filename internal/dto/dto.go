@@ -15,6 +15,12 @@ type GoalCreateRequest struct {
 	Active   bool            `json:"active"`
 }
 
+type GoalUpdateRequest struct {
+	Title    *string          `json:"title"`
+	Priority *models.Priority `json:"priority"`
+	Active   *bool            `json:"active"`
+}
+
 type GoalResponse struct {
 	ID        string          `json:"id"`
 	Title     string          `json:"title"`
@@ -31,12 +37,10 @@ type ProjectCreateRequest struct {
 	Status  models.ProjectStatus `json:"status" binding:"required"`
 }
 
-type ActionCreateRequest struct {
-	ProjectID   string               `json:"projectId" binding:"required"`
-	Description string               `json:"description" binding:"required"`
-	Context     models.ActionContext `json:"context"`
-	Energy      models.Energy        `json:"energy"`
-	Status      models.ActionStatus  `json:"status"`
+type ProjectUpdateRequest struct {
+	Title   *string               `json:"title"`
+	Outcome *string               `json:"outcome"`
+	Status  *models.ProjectStatus `json:"status"`
 }
 
 type ProjectResponse struct {
@@ -49,6 +53,21 @@ type ProjectResponse struct {
 	UpdatedAt time.Time            `json:"updatedAt"`
 }
 
+type ActionCreateRequest struct {
+	ProjectID   string               `json:"projectId" binding:"required"`
+	Description string               `json:"description" binding:"required"`
+	Context     models.ActionContext `json:"context"`
+	Energy      models.Energy        `json:"energy"`
+	Status      models.ActionStatus  `json:"status"`
+}
+
+type ActionUpdateRequest struct {
+	Description *string               `json:"description"`
+	Context     *models.ActionContext `json:"context"`
+	Energy      *models.Energy        `json:"energy"`
+	Status      *models.ActionStatus  `json:"status"`
+}
+
 type NextActionResponse struct {
 	ID          string               `json:"id"`
 	ProjectID   string               `json:"projectId"`
@@ -58,13 +77,6 @@ type NextActionResponse struct {
 	Status      models.ActionStatus  `json:"status"`
 	CreatedAt   time.Time            `json:"createdAt"`
 	UpdatedAt   time.Time            `json:"updatedAt"`
-}
-
-type ActionUpdateRequest struct {
-	Description *string               `json:"description"`
-	Context     *models.ActionContext `json:"context"`
-	Energy      *models.Energy        `json:"energy"`
-	Status      *models.ActionStatus  `json:"status"`
 }
 
 type DashboardResponse struct {
