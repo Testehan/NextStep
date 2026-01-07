@@ -1,6 +1,10 @@
 package models
 
-import "go.mongodb.org/mongo-driver/v2/bson"
+import (
+	"time"
+
+	"go.mongodb.org/mongo-driver/v2/bson"
+)
 
 type Priority string
 
@@ -43,18 +47,22 @@ const (
 )
 
 type Goal struct {
-	ID       bson.ObjectID `bson:"_id,omitempty" json:"id"`
-	Title    string        `bson:"title" json:"title"`
-	Priority Priority      `bson:"priority" json:"priority"`
-	Active   bool          `bson:"active" json:"active"`
+	ID        bson.ObjectID `bson:"_id,omitempty" json:"id"`
+	Title     string        `bson:"title" json:"title"`
+	Priority  Priority      `bson:"priority" json:"priority"`
+	Active    bool          `bson:"active" json:"active"`
+	CreatedAt time.Time     `bson:"createdAt" json:"createdAt"`
+	UpdatedAt time.Time     `bson:"updatedAt" json:"updatedAt"`
 }
 
 type Project struct {
-	ID      bson.ObjectID `bson:"_id,omitempty" json:"id"`
-	GoalID  bson.ObjectID `bson:"goalId" json:"goalId"`
-	Title   string        `bson:"title" json:"title"`
-	Outcome string        `bson:"outcome" json:"outcome"`
-	Status  ProjectStatus `bson:"status" json:"status"`
+	ID        bson.ObjectID `bson:"_id,omitempty" json:"id"`
+	GoalID    bson.ObjectID `bson:"goalId" json:"goalId"`
+	Title     string        `bson:"title" json:"title"`
+	Outcome   string        `bson:"outcome" json:"outcome"`
+	Status    ProjectStatus `bson:"status" json:"status"`
+	CreatedAt time.Time     `bson:"createdAt" json:"createdAt"`
+	UpdatedAt time.Time     `bson:"updatedAt" json:"updatedAt"`
 }
 
 type NextAction struct {
@@ -64,4 +72,6 @@ type NextAction struct {
 	Context     ActionContext `bson:"context" json:"context"`
 	Energy      Energy        `bson:"energy" json:"energy"`
 	Status      ActionStatus  `bson:"status" json:"status"`
+	CreatedAt   time.Time     `bson:"createdAt" json:"createdAt"`
+	UpdatedAt   time.Time     `bson:"updatedAt" json:"updatedAt"`
 }

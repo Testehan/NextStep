@@ -78,6 +78,11 @@ func (r *ProjectRepository) UpdateStatus(ctx context.Context, id bson.ObjectID, 
 	return err
 }
 
+func (r *ProjectRepository) Update(ctx context.Context, project *models.Project) error {
+	_, err := r.collection.UpdateOne(ctx, bson.M{"_id": project.ID}, bson.M{"$set": project})
+	return err
+}
+
 func (r *ProjectRepository) Find(ctx context.Context, filter bson.M) ([]models.Project, error) {
 	cursor, err := r.collection.Find(ctx, filter)
 	if err != nil {
@@ -147,9 +152,9 @@ func (r *ActionRepository) Find(ctx context.Context, filter bson.M, opts ...opti
 	return actions, nil
 }
 
-func (r *ActionRepository) FindOne(ctx context.Context, filter bson.M) (*models.NextAction, error) {
+func (r *ActionRepository) FindOne(ctx context.Context, filter bson.M, opts ...options.Lister[options.FindOneOptions]) (*models.NextAction, error) {
 	var action models.NextAction
-	err := r.collection.FindOne(ctx, filter).Decode(&action)
+	err := r.collection.FindOne(ctx, filter, opts...).Decode(&action)
 	if err != nil {
 		return nil, err
 	}

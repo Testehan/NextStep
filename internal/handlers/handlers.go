@@ -62,6 +62,18 @@ func (h *ProductivityHandler) Capture(c *gin.Context) {
 	c.Status(http.StatusCreated)
 }
 
+func (h *ProductivityHandler) GetActions(c *gin.Context) {
+	status := c.Query("status")
+	projectID := c.Query("projectId")
+
+	resp, err := h.service.GetActions(c.Request.Context(), status, projectID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, resp)
+}
+
 func (h *ProductivityHandler) CreateAction(c *gin.Context) {
 	var req dto.ActionCreateRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -115,7 +127,8 @@ func (h *ProductivityHandler) CreateProject(c *gin.Context) {
 }
 
 func (h *ProductivityHandler) GetProjects(c *gin.Context) {
-	resp, err := h.service.GetProjects(c.Request.Context())
+	goalID := c.Query("goalId")
+	resp, err := h.service.GetProjects(c.Request.Context(), goalID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return

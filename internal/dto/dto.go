@@ -1,6 +1,9 @@
 package dto
 
-import "productivity-app/internal/models"
+import (
+	"productivity-app/internal/models"
+	"time"
+)
 
 type CaptureRequest struct {
 	Text string `json:"text" binding:"required"`
@@ -13,10 +16,12 @@ type GoalCreateRequest struct {
 }
 
 type GoalResponse struct {
-	ID       string          `json:"id"`
-	Title    string          `json:"title"`
-	Priority models.Priority `json:"priority"`
-	Active   bool            `json:"active"`
+	ID        string          `json:"id"`
+	Title     string          `json:"title"`
+	Priority  models.Priority `json:"priority"`
+	Active    bool            `json:"active"`
+	CreatedAt time.Time       `json:"createdAt"`
+	UpdatedAt time.Time       `json:"updatedAt"`
 }
 
 type ProjectCreateRequest struct {
@@ -35,11 +40,13 @@ type ActionCreateRequest struct {
 }
 
 type ProjectResponse struct {
-	ID      string               `json:"id"`
-	GoalID  string               `json:"goalId"`
-	Title   string               `json:"title"`
-	Outcome string               `json:"outcome"`
-	Status  models.ProjectStatus `json:"status"`
+	ID        string               `json:"id"`
+	GoalID    string               `json:"goalId"`
+	Title     string               `json:"title"`
+	Outcome   string               `json:"outcome"`
+	Status    models.ProjectStatus `json:"status"`
+	CreatedAt time.Time            `json:"createdAt"`
+	UpdatedAt time.Time            `json:"updatedAt"`
 }
 
 type NextActionResponse struct {
@@ -49,6 +56,8 @@ type NextActionResponse struct {
 	Context     models.ActionContext `json:"context"`
 	Energy      models.Energy        `json:"energy"`
 	Status      models.ActionStatus  `json:"status"`
+	CreatedAt   time.Time            `json:"createdAt"`
+	UpdatedAt   time.Time            `json:"updatedAt"`
 }
 
 type ActionUpdateRequest struct {

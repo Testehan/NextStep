@@ -59,6 +59,8 @@ func (s *ProductivityService) GetDashboard(ctx context.Context) (*dto.DashboardR
 			Context:     a.Context,
 			Energy:      a.Energy,
 			Status:      a.Status,
+			CreatedAt:   a.CreatedAt,
+			UpdatedAt:   a.UpdatedAt,
 		})
 	}
 
@@ -66,10 +68,13 @@ func (s *ProductivityService) GetDashboard(ctx context.Context) (*dto.DashboardR
 }
 
 func (s *ProductivityService) CreateGoal(ctx context.Context, req dto.GoalCreateRequest) error {
+	now := time.Now()
 	goal := &models.Goal{
-		Title:    req.Title,
-		Priority: req.Priority,
-		Active:   req.Active,
+		Title:     req.Title,
+		Priority:  req.Priority,
+		Active:    req.Active,
+		CreatedAt: now,
+		UpdatedAt: now,
 	}
 	return s.goalRepo.Create(ctx, goal)
 }
@@ -83,10 +88,12 @@ func (s *ProductivityService) GetGoals(ctx context.Context) ([]dto.GoalResponse,
 	resp := []dto.GoalResponse{}
 	for _, g := range goals {
 		resp = append(resp, dto.GoalResponse{
-			ID:       g.ID.Hex(),
-			Title:    g.Title,
-			Priority: g.Priority,
-			Active:   g.Active,
+			ID:        g.ID.Hex(),
+			Title:     g.Title,
+			Priority:  g.Priority,
+			Active:    g.Active,
+			CreatedAt: g.CreatedAt,
+			UpdatedAt: g.UpdatedAt,
 		})
 	}
 	return resp, nil
@@ -96,12 +103,15 @@ func (s *ProductivityService) Capture(ctx context.Context, text string) error {
 	// Simple parsing: short, specific -> NextAction, vague -> Project
 	// This is a placeholder for more sophisticated logic
 	isVague := len(strings.Split(text, " ")) < 3 || strings.Contains(strings.ToLower(text), "maybe")
+	now := time.Now()
 
 	if isVague {
 		// Create a Project (mocking a default GoalID for now, or could be a "Inbox" Goal)
 		project := &models.Project{
-			Title:  text,
-			Status: models.ProjectStatusBacklog,
+			Title:     text,
+			Status:    models.ProjectStatusBacklog,
+			CreatedAt: now,
+			UpdatedAt: now,
 		}
 		return s.projectRepo.Create(ctx, project)
 	} else {
@@ -111,9 +121,44 @@ func (s *ProductivityService) Capture(ctx context.Context, text string) error {
 			Status:      models.ActionStatusQueued,
 			Context:     models.ContextQuick,
 			Energy:      models.EnergyLow,
+			CreatedAt:   now,
+			UpdatedAt:   now,
 		}
 		return s.actionRepo.Create(ctx, action)
 	}
+}
+
+func (s *ProductivityService) GetActions(ctx context.Context, status string, projectID string) ([]dto.NextActionResponse, error) {
+	filter := bson.M{}
+	if status != "" {
+		filter["status"] = status
+	}
+	if projectID != "" {
+		pID, err := bson.ObjectIDFromHex(projectID)
+		if err == nil {
+			filter["projectId"] = pID
+		}
+	}
+
+	actions, err := s.actionRepo.Find(ctx, filter)
+	if err != nil {
+		return nil, err
+	}
+
+	resp := []dto.NextActionResponse{}
+	for _, a := range actions {
+		resp = append(resp, dto.NextActionResponse{
+			ID:          a.ID.Hex(),
+			ProjectID:   a.ProjectID.Hex(),
+			Description: a.Description,
+			Context:     a.Context,
+			Energy:      a.Energy,
+			Status:      a.Status,
+			CreatedAt:   a.CreatedAt,
+			UpdatedAt:   a.UpdatedAt,
+		})
+	}
+	return resp, nil
 }
 
 func (s *ProductivityService) CreateAction(ctx context.Context, req dto.ActionCreateRequest) error {
@@ -130,12 +175,15 @@ func (s *ProductivityService) CreateAction(ctx context.Context, req dto.ActionCr
 		}
 	}
 
+	now := time.Now()
 	action := &models.NextAction{
 		ProjectID:   projectID,
 		Description: req.Description,
 		Context:     req.Context,
 		Energy:      req.Energy,
 		Status:      req.Status,
+		CreatedAt:   now,
+		UpdatedAt:   now,
 	}
 
 	return s.actionRepo.Create(ctx, action)
@@ -175,7 +223,17 @@ func (s *ProductivityService) UpdateAction(ctx context.Context, actionID string,
 		action.Status = *req.Status
 	}
 
-	return s.actionRepo.Update(ctx, action)
+	action.UpdatedAt = time.Now()
+	if err := s.actionRepo.Update(ctx, action); err != nil {
+		return err
+	}
+
+	// Trigger promotion if status was changed to DONE
+	if req.Status != nil && *req.Status == models.ActionStatusDone {
+		_ = s.promoteNextQueued(ctx, action.ProjectID)
+	}
+
+	return nil
 }
 
 func (s *ProductivityService) CompleteAction(ctx context.Context, actionID string) error {
@@ -189,34 +247,54 @@ func (s *ProductivityService) CompleteAction(ctx context.Context, actionID strin
 		return err
 	}
 
+	now := time.Now()
 	action.Status = models.ActionStatusDone
+	action.UpdatedAt = now
 	if err := s.actionRepo.Update(ctx, action); err != nil {
 		return err
 	}
 
-	// Promote next QUEUED action to CURRENT
-	nextAction, err := s.actionRepo.FindOne(ctx, bson.M{
-		"projectId": action.ProjectID,
-		"status":    models.ActionStatusQueued,
+	return s.promoteNextQueued(ctx, action.ProjectID)
+}
+
+func (s *ProductivityService) promoteNextQueued(ctx context.Context, projectID bson.ObjectID) error {
+	// Only promote if there is NO current action
+	current, err := s.actionRepo.FindOne(ctx, bson.M{
+		"projectId": projectID,
+		"status":    models.ActionStatusCurrent,
 	})
+	if err == nil && current != nil {
+		return nil
+	}
+
+	// Find the OLDEST queued action (sort by _id)
+	nextAction, err := s.actionRepo.FindOne(ctx, bson.M{
+		"projectId": projectID,
+		"status":    models.ActionStatusQueued,
+	}, options.FindOne().SetSort(bson.M{"_id": 1}))
+
 	if err != nil {
 		if errors.Is(err, mongo.ErrNoDocuments) {
-			return nil // No more actions to promote
+			return nil
 		}
 		return err
 	}
 
 	nextAction.Status = models.ActionStatusCurrent
+	nextAction.UpdatedAt = time.Now()
 	return s.actionRepo.Update(ctx, nextAction)
 }
 
 func (s *ProductivityService) CreateProject(ctx context.Context, req dto.ProjectCreateRequest) error {
 	goalID, _ := bson.ObjectIDFromHex(req.GoalID)
+	now := time.Now()
 	project := &models.Project{
-		GoalID:  goalID,
-		Title:   req.Title,
-		Outcome: req.Outcome,
-		Status:  req.Status,
+		GoalID:    goalID,
+		Title:     req.Title,
+		Outcome:   req.Outcome,
+		Status:    req.Status,
+		CreatedAt: now,
+		UpdatedAt: now,
 	}
 
 	if project.Status == models.ProjectStatusActive {
@@ -232,8 +310,16 @@ func (s *ProductivityService) CreateProject(ctx context.Context, req dto.Project
 	return s.projectRepo.Create(ctx, project)
 }
 
-func (s *ProductivityService) GetProjects(ctx context.Context) ([]dto.ProjectResponse, error) {
-	projects, err := s.projectRepo.Find(ctx, bson.M{})
+func (s *ProductivityService) GetProjects(ctx context.Context, goalID string) ([]dto.ProjectResponse, error) {
+	filter := bson.M{}
+	if goalID != "" {
+		id, err := bson.ObjectIDFromHex(goalID)
+		if err == nil {
+			filter["goalId"] = id
+		}
+	}
+
+	projects, err := s.projectRepo.Find(ctx, filter)
 	if err != nil {
 		return nil, err
 	}
@@ -241,11 +327,13 @@ func (s *ProductivityService) GetProjects(ctx context.Context) ([]dto.ProjectRes
 	resp := []dto.ProjectResponse{}
 	for _, p := range projects {
 		resp = append(resp, dto.ProjectResponse{
-			ID:      p.ID.Hex(),
-			GoalID:  p.GoalID.Hex(),
-			Title:   p.Title,
-			Outcome: p.Outcome,
-			Status:  p.Status,
+			ID:        p.ID.Hex(),
+			GoalID:    p.GoalID.Hex(),
+			Title:     p.Title,
+			Outcome:   p.Outcome,
+			Status:    p.Status,
+			CreatedAt: p.CreatedAt,
+			UpdatedAt: p.UpdatedAt,
 		})
 	}
 	return resp, nil
@@ -265,7 +353,15 @@ func (s *ProductivityService) PromoteProject(ctx context.Context, projectID stri
 		return errors.New("max 3 active projects allowed")
 	}
 
-	return s.projectRepo.UpdateStatus(ctx, id, models.ProjectStatusActive)
+	// Update with timestamp
+	project, err := s.projectRepo.GetByID(ctx, id)
+	if err != nil {
+		return err
+	}
+	project.Status = models.ProjectStatusActive
+	project.UpdatedAt = time.Now()
+	
+	return s.projectRepo.Update(ctx, project)
 }
 
 func (s *ProductivityService) GetWeeklyReview(ctx context.Context) (*dto.WeeklyReviewResponse, error) {
@@ -283,11 +379,13 @@ func (s *ProductivityService) GetWeeklyReview(ctx context.Context) (*dto.WeeklyR
 		})
 		if err != nil && errors.Is(err, mongo.ErrNoDocuments) {
 			projectsWithoutCurrent = append(projectsWithoutCurrent, dto.ProjectResponse{
-				ID:      p.ID.Hex(),
-				GoalID:  p.GoalID.Hex(),
-				Title:   p.Title,
-				Outcome: p.Outcome,
-				Status:  p.Status,
+				ID:        p.ID.Hex(),
+				GoalID:    p.GoalID.Hex(),
+				Title:     p.Title,
+				Outcome:   p.Outcome,
+				Status:    p.Status,
+				CreatedAt: p.CreatedAt,
+				UpdatedAt: p.UpdatedAt,
 			})
 		}
 	}
@@ -304,6 +402,8 @@ func (s *ProductivityService) GetWeeklyReview(ctx context.Context) (*dto.WeeklyR
 			ProjectID:   a.ProjectID.Hex(),
 			Description: a.Description,
 			Status:      a.Status,
+			CreatedAt:   a.CreatedAt,
+			UpdatedAt:   a.UpdatedAt,
 		})
 	}
 
@@ -315,11 +415,13 @@ func (s *ProductivityService) GetWeeklyReview(ctx context.Context) (*dto.WeeklyR
 	backlogProjects := []dto.ProjectResponse{}
 	for _, p := range backlogProjectsData {
 		backlogProjects = append(backlogProjects, dto.ProjectResponse{
-			ID:      p.ID.Hex(),
-			GoalID:  p.GoalID.Hex(),
-			Title:   p.Title,
-			Outcome: p.Outcome,
-			Status:  p.Status,
+			ID:        p.ID.Hex(),
+			GoalID:    p.GoalID.Hex(),
+			Title:     p.Title,
+			Outcome:   p.Outcome,
+			Status:    p.Status,
+			CreatedAt: p.CreatedAt,
+			UpdatedAt: p.UpdatedAt,
 		})
 	}
 
