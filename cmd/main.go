@@ -1,0 +1,82 @@
+package main
+
+import (
+	"log"
+	"os"
+	"productivity-app/internal/db"
+	"productivity-app/internal/handlers"
+	"productivity-app/internal/repositories"
+	"productivity-app/internal/services"
+
+	"github.com/gin-gonic/gin"
+	"github.com/joho/godotenv"
+	"github.com/gin-contrib/cors"
+)
+
+func main() {
+	if err := godotenv.Load(); err != nil {
+		log.Println("No .env file found, using system environment variables")
+	}
+
+	mongoURI := os.Getenv("MONGO_URI")
+	if mongoURI == "" {
+		mongoURI = "mongodb://localhost:27017"
+	}
+
+	dbName := os.Getenv("DATABASE_NAME")
+	if dbName == "" {
+		dbName = "productivity"
+	}
+
+	client, err := db.Connect(mongoURI)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer client.Disconnect(nil)
+
+	database := client.Database(dbName)
+
+	// Repositories
+	goalRepo := repositories.NewGoalRepository(database)
+	projectRepo := repositories.NewProjectRepository(database)
+	actionRepo := repositories.NewActionRepository(database)
+
+	// Service
+	service := services.NewProductivityService(goalRepo, projectRepo, actionRepo)
+
+	// Handlers
+	handler := handlers.NewProductivityHandler(service)
+
+	// Router
+	r := gin.Default()
+
+	// CORS Middleware
+	r.Use(cors.New(cors.Config{
+		AllowOrigins:     []string{"http://localhost:5173", "http://localhost:3000", "http://127.0.0.1:5173", "http://127.0.0.1:3000"},
+		AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
+		AllowHeaders:     []string{"Origin", "Content-Type", "Accept", "Authorization"},
+		ExposeHeaders:    []string{"Content-Length"},
+		AllowCredentials: true,
+	}))
+
+	r.GET("/dashboard", handler.GetDashboard)
+	r.POST("/goals", handler.CreateGoal)
+	r.GET("/goals", handler.GetGoals)
+	r.POST("/capture", handler.Capture)
+	r.POST("/actions", handler.CreateAction)
+	r.POST("/actions/:id/complete", handler.CompleteAction)
+	r.POST("/projects", handler.CreateProject)
+	r.GET("/projects", handler.GetProjects)
+	r.POST("/projects/:id/promote", handler.PromoteProject)
+	r.GET("/weekly-review", handler.GetWeeklyReview)
+
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
+	}
+
+	log.Printf("Server starting on port %s", port)
+	if err := r.Run(":" + port); err != nil {
+		log.Fatal(err)
+	}
+}
