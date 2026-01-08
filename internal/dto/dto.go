@@ -38,6 +38,7 @@ type ProjectCreateRequest struct {
 }
 
 type ProjectUpdateRequest struct {
+	GoalID  *string               `json:"goalId"`
 	Title   *string               `json:"title"`
 	Outcome *string               `json:"outcome"`
 	Status  *models.ProjectStatus `json:"status"`

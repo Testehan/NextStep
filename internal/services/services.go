@@ -381,6 +381,12 @@ func (s *ProductivityService) UpdateProject(ctx context.Context, projectID strin
 	}
 
 	oldStatus := project.Status
+	if req.GoalID != nil {
+		goalID, err := bson.ObjectIDFromHex(*req.GoalID)
+		if err == nil {
+			project.GoalID = goalID
+		}
+	}
 	if req.Title != nil {
 		project.Title = *req.Title
 	}
