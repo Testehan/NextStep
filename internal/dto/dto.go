@@ -67,6 +67,7 @@ type ActionUpdateRequest struct {
 	Context     *models.ActionContext `json:"context"`
 	Energy      *models.Energy        `json:"energy"`
 	Status      *models.ActionStatus  `json:"status"`
+	CreatedAt   *time.Time            `json:"createdAt"`
 }
 
 type NextActionResponse struct {

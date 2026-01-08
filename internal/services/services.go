@@ -182,7 +182,7 @@ func (s *ProductivityService) GetActions(ctx context.Context, status string, pro
 		}
 	}
 
-	actions, err := s.actionRepo.Find(ctx, filter)
+	actions, err := s.actionRepo.Find(ctx, filter, options.Find().SetSort(bson.M{"createdAt": 1}))
 	if err != nil {
 		return nil, err
 	}
@@ -276,6 +276,9 @@ func (s *ProductivityService) UpdateAction(ctx context.Context, actionID string,
 		}
 		action.Status = *req.Status
 	}
+	if req.CreatedAt != nil {
+		action.CreatedAt = *req.CreatedAt
+	}
 
 	action.UpdatedAt = time.Now()
 	if err := s.actionRepo.Update(ctx, action); err != nil {
@@ -330,7 +333,7 @@ func (s *ProductivityService) promoteNextQueued(ctx context.Context, projectID b
 	nextAction, err := s.actionRepo.FindOne(ctx, bson.M{
 		"projectId": projectID,
 		"status":    models.ActionStatusQueued,
-	}, options.FindOne().SetSort(bson.M{"_id": 1}))
+	}, options.FindOne().SetSort(bson.M{"createdAt": 1}))
 
 	if err != nil {
 		if errors.Is(err, mongo.ErrNoDocuments) {
