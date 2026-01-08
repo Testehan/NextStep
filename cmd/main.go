@@ -59,6 +59,9 @@ func main() {
 		AllowCredentials: true,
 	}))
 
+	// Auth Middleware
+	r.Use(handlers.AuthMiddleware())
+
 	r.GET("/dashboard", handler.GetDashboard)
 	r.POST("/goals", handler.CreateGoal)
 	r.GET("/goals", handler.GetGoals)
