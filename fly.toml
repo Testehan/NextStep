@@ -1,0 +1,27 @@
+# fly.toml app configuration file generated for nextstep-app-long-sound-6012 on 2026-04-12T09:55:19+03:00
+#
+# See https://fly.io/docs/reference/configuration/ for information about how to use this file.
+#
+
+app = 'nextstep-app-long-sound-6012'
+primary_region = 'fra'
+
+[build]
+  [build.args]
+    GO_VERSION = '1.26.2'
+
+[env]
+  PORT = '8080'
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = 'stop'
+  auto_start_machines = true
+  min_machines_running = 0
+  processes = ['app']
+
+[[vm]]
+  memory = '256mb'
+  cpus = 1
+  memory_mb = 256
