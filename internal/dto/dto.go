@@ -55,7 +55,7 @@ type ProjectResponse struct {
 }
 
 type ActionCreateRequest struct {
-	ProjectID   string               `json:"projectId" binding:"required"`
+	ProjectID   *string              `json:"projectId"`
 	Description string               `json:"description" binding:"required"`
 	Context     models.ActionContext `json:"context"`
 	Energy      models.Energy        `json:"energy"`

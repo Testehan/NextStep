@@ -66,7 +66,7 @@ type Project struct {
 
 type NextAction struct {
 	ID          bson.ObjectID `bson:"_id,omitempty" json:"id"`
-	ProjectID   bson.ObjectID `bson:"projectId" json:"projectId"`
+	ProjectID   bson.ObjectID `bson:"projectId,omitempty" json:"projectId"`
 	Description string        `bson:"description" json:"description"`
 	Context     ActionContext `bson:"context" json:"context"`
 	Energy      Energy        `bson:"energy" json:"energy"`

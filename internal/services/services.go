@@ -53,9 +53,13 @@ func (s *ProductivityService) GetDashboard(ctx context.Context) (*dto.DashboardR
 
 	resp := &dto.DashboardResponse{NextActions: []dto.NextActionResponse{}}
 	for _, a := range actions {
+		projectID := a.ProjectID.Hex()
+		if projectID == "000000000000000000000000" {
+			projectID = ""
+		}
 		resp.NextActions = append(resp.NextActions, dto.NextActionResponse{
 			ID:          a.ID.Hex(),
-			ProjectID:   a.ProjectID.Hex(),
+			ProjectID:   projectID,
 			Description: a.Description,
 			Context:     a.Context,
 			Energy:      a.Energy,
@@ -163,7 +167,7 @@ func (s *ProductivityService) Capture(ctx context.Context, text string) error {
 			CreatedAt:   now,
 			UpdatedAt:   now,
 		}
-		
+
 		// If we had a default active project (e.g., "Inbox"), we could auto-promote here.
 		// For now, let's keep it simple as Capture doesn't specify a projectID yet.
 		return s.actionRepo.Create(ctx, action)
@@ -189,9 +193,13 @@ func (s *ProductivityService) GetActions(ctx context.Context, status string, pro
 
 	resp := []dto.NextActionResponse{}
 	for _, a := range actions {
+		projectID := a.ProjectID.Hex()
+		if projectID == "000000000000000000000000" {
+			projectID = ""
+		}
 		resp = append(resp, dto.NextActionResponse{
 			ID:          a.ID.Hex(),
-			ProjectID:   a.ProjectID.Hex(),
+			ProjectID:   projectID,
 			Description: a.Description,
 			Context:     a.Context,
 			Energy:      a.Energy,
@@ -204,9 +212,12 @@ func (s *ProductivityService) GetActions(ctx context.Context, status string, pro
 }
 
 func (s *ProductivityService) CreateAction(ctx context.Context, req dto.ActionCreateRequest) error {
-	projectID, _ := bson.ObjectIDFromHex(req.ProjectID)
+	var projectID bson.ObjectID
+	if req.ProjectID != nil && *req.ProjectID != "" {
+		projectID, _ = bson.ObjectIDFromHex(*req.ProjectID)
+	}
 
-	if req.Status == models.ActionStatusCurrent {
+	if req.Status == models.ActionStatusCurrent && projectID != bson.ObjectID([]byte("000000000000")) {
 		existing, err := s.actionRepo.FindOne(ctx, bson.M{
 			"projectId": projectID,
 			"status":    models.ActionStatusCurrent,
@@ -228,7 +239,7 @@ func (s *ProductivityService) CreateAction(ctx context.Context, req dto.ActionCr
 	}
 
 	// Auto-promote if project is ACTIVE and has no CURRENT action
-	if action.Status == models.ActionStatusQueued {
+	if action.Status == models.ActionStatusQueued && projectID != bson.ObjectID([]byte("000000000000")) {
 		project, err := s.projectRepo.GetByID(ctx, projectID)
 		if err == nil && project.Status == models.ProjectStatusActive {
 			current, _ := s.actionRepo.FindOne(ctx, bson.M{
@@ -473,7 +484,7 @@ func (s *ProductivityService) PromoteProject(ctx context.Context, projectID stri
 	oldStatus := project.Status
 	project.Status = models.ProjectStatusActive
 	project.UpdatedAt = time.Now()
-	
+
 	if err := s.projectRepo.Update(ctx, project); err != nil {
 		return err
 	}
@@ -527,9 +538,13 @@ func (s *ProductivityService) GetWeeklyReview(ctx context.Context) (*dto.WeeklyR
 	}
 	completedActions := []dto.NextActionResponse{}
 	for _, a := range doneActions {
+		projectID := a.ProjectID.Hex()
+		if projectID == "000000000000000000000000" {
+			projectID = ""
+		}
 		completedActions = append(completedActions, dto.NextActionResponse{
 			ID:          a.ID.Hex(),
-			ProjectID:   a.ProjectID.Hex(),
+			ProjectID:   projectID,
 			Description: a.Description,
 			Status:      a.Status,
 			CreatedAt:   a.CreatedAt,
