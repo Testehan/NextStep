@@ -63,6 +63,7 @@ type ActionCreateRequest struct {
 }
 
 type ActionUpdateRequest struct {
+	ProjectID   *string               `json:"projectId"`
 	Description *string               `json:"description"`
 	Context     *models.ActionContext `json:"context"`
 	Energy      *models.Energy        `json:"energy"`

@@ -266,6 +266,24 @@ func (s *ProductivityService) UpdateAction(ctx context.Context, actionID string,
 		return err
 	}
 
+	newStatus := action.Status
+	if req.Status != nil {
+		newStatus = *req.Status
+	}
+
+	newProjectID := action.ProjectID
+	if req.ProjectID != nil {
+		if *req.ProjectID == "" {
+			newProjectID = bson.ObjectID{}
+		} else {
+			pID, err := bson.ObjectIDFromHex(*req.ProjectID)
+			if err != nil {
+				return err
+			}
+			newProjectID = pID
+		}
+	}
+
 	if req.Description != nil {
 		action.Description = *req.Description
 	}
@@ -275,18 +293,23 @@ func (s *ProductivityService) UpdateAction(ctx context.Context, actionID string,
 	if req.Energy != nil {
 		action.Energy = *req.Energy
 	}
-	if req.Status != nil {
-		if *req.Status == models.ActionStatusCurrent && action.Status != models.ActionStatusCurrent {
+
+	if newStatus == models.ActionStatusCurrent && (action.Status != models.ActionStatusCurrent || action.ProjectID != newProjectID) {
+		if newProjectID != (bson.ObjectID{}) {
 			existing, err := s.actionRepo.FindOne(ctx, bson.M{
-				"projectId": action.ProjectID,
+				"projectId": newProjectID,
 				"status":    models.ActionStatusCurrent,
+				"_id":       bson.M{"$ne": action.ID},
 			})
 			if err == nil && existing != nil {
 				return errors.New("each project has max one NextAction with status = CURRENT")
 			}
 		}
-		action.Status = *req.Status
 	}
+
+	action.Status = newStatus
+	action.ProjectID = newProjectID
+
 	if req.CreatedAt != nil {
 		action.CreatedAt = *req.CreatedAt
 	}
