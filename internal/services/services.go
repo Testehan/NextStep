@@ -269,7 +269,9 @@ func (s *ProductivityService) CreateAction(ctx context.Context, req dto.ActionCr
 			"status":    models.ActionStatusCurrent,
 		})
 		if err == nil && existing != nil {
-			return errors.New("each project has max one NextAction with status = CURRENT")
+			existing.Status = models.ActionStatusQueued
+			existing.UpdatedAt = time.Now()
+			_ = s.actionRepo.Update(ctx, existing)
 		}
 	}
 
@@ -359,7 +361,9 @@ func (s *ProductivityService) UpdateAction(ctx context.Context, actionID string,
 				"_id":       bson.M{"$ne": action.ID},
 			})
 			if err == nil && existing != nil {
-				return errors.New("each project has max one NextAction with status = CURRENT")
+				existing.Status = models.ActionStatusQueued
+				existing.UpdatedAt = time.Now()
+				_ = s.actionRepo.Update(ctx, existing)
 			}
 		}
 	}
