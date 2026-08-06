@@ -71,6 +71,8 @@ type NextAction struct {
 	Context     ActionContext `bson:"context" json:"context"`
 	Energy      Energy        `bson:"energy" json:"energy"`
 	Status      ActionStatus  `bson:"status" json:"status"`
+	SortOrder   float64       `bson:"sortOrder" json:"sortOrder"`
+	CompletedAt *time.Time    `bson:"completedAt,omitempty" json:"completedAt"`
 	CreatedAt   time.Time     `bson:"createdAt" json:"createdAt"`
 	UpdatedAt   time.Time     `bson:"updatedAt" json:"updatedAt"`
 }

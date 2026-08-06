@@ -46,7 +46,7 @@ func (s *ProductivityService) GetDashboard(ctx context.Context) (*dto.DashboardR
 	actions, err := s.actionRepo.Find(ctx, bson.M{
 		"projectId": bson.M{"$in": projectIDs},
 		"status":    models.ActionStatusCurrent,
-	}, options.Find().SetLimit(5))
+	}, options.Find().SetLimit(5).SetSort(bson.D{{Key: "sortOrder", Value: 1}, {Key: "createdAt", Value: 1}}))
 	if err != nil {
 		return nil, err
 	}
@@ -64,6 +64,8 @@ func (s *ProductivityService) GetDashboard(ctx context.Context) (*dto.DashboardR
 			Context:     a.Context,
 			Energy:      a.Energy,
 			Status:      a.Status,
+			SortOrder:   a.SortOrder,
+			CompletedAt: a.CompletedAt,
 			CreatedAt:   a.CreatedAt,
 			UpdatedAt:   a.UpdatedAt,
 		})
@@ -159,22 +161,27 @@ func (s *ProductivityService) Capture(ctx context.Context, text string) error {
 		}
 		return s.projectRepo.Create(ctx, project)
 	} else {
+		lastAction, err := s.actionRepo.FindOne(ctx, bson.M{}, options.FindOne().SetSort(bson.M{"sortOrder": -1}))
+		sortOrder := 0.0
+		if err == nil {
+			sortOrder = lastAction.SortOrder + 1
+		}
+
 		action := &models.NextAction{
 			Description: text,
 			Status:      models.ActionStatusQueued,
 			Context:     models.ContextQuick,
 			Energy:      models.EnergyLow,
+			SortOrder:   sortOrder,
 			CreatedAt:   now,
 			UpdatedAt:   now,
 		}
 
-		// If we had a default active project (e.g., "Inbox"), we could auto-promote here.
-		// For now, let's keep it simple as Capture doesn't specify a projectID yet.
 		return s.actionRepo.Create(ctx, action)
 	}
 }
 
-func (s *ProductivityService) GetActions(ctx context.Context, status string, projectID string) ([]dto.NextActionResponse, error) {
+func (s *ProductivityService) GetActions(ctx context.Context, status, projectID, from, to, goalID string) ([]dto.NextActionResponse, error) {
 	filter := bson.M{}
 	if status != "" {
 		filter["status"] = status
@@ -185,25 +192,64 @@ func (s *ProductivityService) GetActions(ctx context.Context, status string, pro
 			filter["projectId"] = pID
 		}
 	}
+	if goalID != "" {
+		gID, err := bson.ObjectIDFromHex(goalID)
+		if err == nil {
+			projects, _ := s.projectRepo.Find(ctx, bson.M{"goalId": gID})
+			projectIDs := make([]bson.ObjectID, len(projects))
+			for i, p := range projects {
+				projectIDs[i] = p.ID
+			}
+			if len(projectIDs) > 0 {
+				filter["projectId"] = bson.M{"$in": projectIDs}
+			}
+		}
+	}
+	if from != "" {
+		fromTime, err := time.Parse(time.RFC3339, from)
+		if err == nil {
+			field := "createdAt"
+			if status == string(models.ActionStatusDone) {
+				field = "completedAt"
+			}
+			filter[field] = bson.M{"$gte": fromTime}
+		}
+	}
+	if to != "" {
+		toTime, err := time.Parse(time.RFC3339, to)
+		if err == nil {
+			field := "createdAt"
+			if status == string(models.ActionStatusDone) {
+				field = "completedAt"
+			}
+			if existing, ok := filter[field]; ok {
+				filter[field] = bson.M{"$gte": existing.(bson.M)["$gte"], "$lte": toTime}
+			} else {
+				filter[field] = bson.M{"$lte": toTime}
+			}
+		}
+	}
 
-	actions, err := s.actionRepo.Find(ctx, filter, options.Find().SetSort(bson.M{"createdAt": 1}))
+	actions, err := s.actionRepo.Find(ctx, filter, options.Find().SetSort(bson.D{{Key: "sortOrder", Value: 1}, {Key: "createdAt", Value: 1}}))
 	if err != nil {
 		return nil, err
 	}
 
 	resp := []dto.NextActionResponse{}
 	for _, a := range actions {
-		projectID := a.ProjectID.Hex()
-		if projectID == "000000000000000000000000" {
-			projectID = ""
+		pID := a.ProjectID.Hex()
+		if pID == "000000000000000000000000" {
+			pID = ""
 		}
 		resp = append(resp, dto.NextActionResponse{
 			ID:          a.ID.Hex(),
-			ProjectID:   projectID,
+			ProjectID:   pID,
 			Description: a.Description,
 			Context:     a.Context,
 			Energy:      a.Energy,
 			Status:      a.Status,
+			SortOrder:   a.SortOrder,
+			CompletedAt: a.CompletedAt,
 			CreatedAt:   a.CreatedAt,
 			UpdatedAt:   a.UpdatedAt,
 		})
@@ -217,7 +263,7 @@ func (s *ProductivityService) CreateAction(ctx context.Context, req dto.ActionCr
 		projectID, _ = bson.ObjectIDFromHex(*req.ProjectID)
 	}
 
-	if req.Status == models.ActionStatusCurrent && projectID != bson.ObjectID([]byte("000000000000")) {
+	if req.Status == models.ActionStatusCurrent && projectID != (bson.ObjectID{}) {
 		existing, err := s.actionRepo.FindOne(ctx, bson.M{
 			"projectId": projectID,
 			"status":    models.ActionStatusCurrent,
@@ -227,6 +273,13 @@ func (s *ProductivityService) CreateAction(ctx context.Context, req dto.ActionCr
 		}
 	}
 
+	// Auto-assign sortOrder
+	lastAction, err := s.actionRepo.FindOne(ctx, bson.M{"projectId": projectID}, options.FindOne().SetSort(bson.M{"sortOrder": -1}))
+	sortOrder := 0.0
+	if err == nil {
+		sortOrder = lastAction.SortOrder + 1
+	}
+
 	now := time.Now()
 	action := &models.NextAction{
 		ProjectID:   projectID,
@@ -234,12 +287,13 @@ func (s *ProductivityService) CreateAction(ctx context.Context, req dto.ActionCr
 		Context:     req.Context,
 		Energy:      req.Energy,
 		Status:      req.Status,
+		SortOrder:   sortOrder,
 		CreatedAt:   now,
 		UpdatedAt:   now,
 	}
 
 	// Auto-promote if project is ACTIVE and has no CURRENT action
-	if action.Status == models.ActionStatusQueued && projectID != bson.ObjectID([]byte("000000000000")) {
+	if action.Status == models.ActionStatusQueued && projectID != (bson.ObjectID{}) {
 		project, err := s.projectRepo.GetByID(ctx, projectID)
 		if err == nil && project.Status == models.ProjectStatusActive {
 			current, _ := s.actionRepo.FindOne(ctx, bson.M{
@@ -293,6 +347,9 @@ func (s *ProductivityService) UpdateAction(ctx context.Context, actionID string,
 	if req.Energy != nil {
 		action.Energy = *req.Energy
 	}
+	if req.SortOrder != nil {
+		action.SortOrder = *req.SortOrder
+	}
 
 	if newStatus == models.ActionStatusCurrent && (action.Status != models.ActionStatusCurrent || action.ProjectID != newProjectID) {
 		if newProjectID != (bson.ObjectID{}) {
@@ -309,6 +366,13 @@ func (s *ProductivityService) UpdateAction(ctx context.Context, actionID string,
 
 	action.Status = newStatus
 	action.ProjectID = newProjectID
+
+	if req.Status != nil && *req.Status == models.ActionStatusDone {
+		now := time.Now()
+		action.CompletedAt = &now
+	} else if req.Status != nil && *req.Status != models.ActionStatusDone {
+		action.CompletedAt = nil
+	}
 
 	if req.CreatedAt != nil {
 		action.CreatedAt = *req.CreatedAt
@@ -347,6 +411,7 @@ func (s *ProductivityService) CompleteAction(ctx context.Context, actionID strin
 
 	now := time.Now()
 	action.Status = models.ActionStatusDone
+	action.CompletedAt = &now
 	action.UpdatedAt = now
 	if err := s.actionRepo.Update(ctx, action); err != nil {
 		return err
@@ -367,7 +432,7 @@ func (s *ProductivityService) promoteNextQueued(ctx context.Context, projectID b
 	nextAction, err := s.actionRepo.FindOne(ctx, bson.M{
 		"projectId": projectID,
 		"status":    models.ActionStatusQueued,
-	}, options.FindOne().SetSort(bson.M{"createdAt": 1}))
+	}, options.FindOne().SetSort(bson.D{{Key: "sortOrder", Value: 1}, {Key: "createdAt", Value: 1}}))
 
 	if err != nil {
 		if errors.Is(err, mongo.ErrNoDocuments) {
@@ -570,6 +635,8 @@ func (s *ProductivityService) GetWeeklyReview(ctx context.Context) (*dto.WeeklyR
 			ProjectID:   projectID,
 			Description: a.Description,
 			Status:      a.Status,
+			SortOrder:   a.SortOrder,
+			CompletedAt: a.CompletedAt,
 			CreatedAt:   a.CreatedAt,
 			UpdatedAt:   a.UpdatedAt,
 		})

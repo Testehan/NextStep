@@ -63,12 +63,13 @@ type ActionCreateRequest struct {
 }
 
 type ActionUpdateRequest struct {
-	ProjectID   *string               `json:"projectId"`
 	Description *string               `json:"description"`
 	Context     *models.ActionContext `json:"context"`
 	Energy      *models.Energy        `json:"energy"`
 	Status      *models.ActionStatus  `json:"status"`
+	SortOrder   *float64              `json:"sortOrder"`
 	CreatedAt   *time.Time            `json:"createdAt"`
+	ProjectID   *string               `json:"projectId"`
 }
 
 type NextActionResponse struct {
@@ -78,6 +79,8 @@ type NextActionResponse struct {
 	Context     models.ActionContext `json:"context"`
 	Energy      models.Energy        `json:"energy"`
 	Status      models.ActionStatus  `json:"status"`
+	SortOrder   float64              `json:"sortOrder"`
+	CompletedAt *time.Time           `json:"completedAt"`
 	CreatedAt   time.Time            `json:"createdAt"`
 	UpdatedAt   time.Time            `json:"updatedAt"`
 }

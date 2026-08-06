@@ -89,8 +89,11 @@ func (h *ProductivityHandler) Capture(c *gin.Context) {
 func (h *ProductivityHandler) GetActions(c *gin.Context) {
 	status := c.Query("status")
 	projectID := c.Query("projectId")
+	from := c.Query("from")
+	to := c.Query("to")
+	goalID := c.Query("goalId")
 
-	resp, err := h.service.GetActions(c.Request.Context(), status, projectID)
+	resp, err := h.service.GetActions(c.Request.Context(), status, projectID, from, to, goalID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
